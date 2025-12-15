@@ -1,0 +1,44 @@
+# Django
+*.log
+*.pot
+*.pyc
+__pycache__/
+db.sqlite3
+media/
+staticfiles/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Virtual environment
+*.pyc
+.python-version
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Coverage
+.coverage
+htmlcov/
+
+# Test
+.pytest_cache/
+.mypy_cache/
