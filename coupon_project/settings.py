@@ -9,6 +9,7 @@ https://docs.djangoproject.com/en/5.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
+import os
 
 from pathlib import Path
 
@@ -40,6 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'coupons',
     'rest_framework',
+    'rest_framework.authtoken' #DRF自带的Token表
 ]
 
 AUTH_USER_MODEL = 'coupons.User'
@@ -107,9 +109,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'zh-hans'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Shanghai'
 
 USE_I18N = True
 
@@ -120,8 +122,59 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = os.path.join(BASE_DIR, "static")
 
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR,"staticfiles")
+]
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+REST_FRAMEWORK = {
+    # 自动生成 API 文档的 Schema
+    # 开发环境：保留可以方便生成 API 文档
+    # 生产环境：可换成 OpenAPI 或删掉
+    "DEFAULT_SCHEMA_CLASS": "rest_framework.schemas.coreapi.AutoSchema",
+
+    # 默认分页
+    # 建议保留，防止一次返回大量数据
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 50,  # 每页数量，可根据需求调整
+
+    # 日期时间格式
+    # 保持统一格式输出
+    "DATETIME_FORMAT": "%Y-%m-%d %H:%M:%S",
+
+    # 渲染器（Renderer）
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",  # 必须保留，生产环境返回 JSON
+        "rest_framework.renderers.BrowsableAPIRenderer",  # 开发调试用，生产环境建议去掉
+    ],
+
+    # 解析器（Parser），用于解析 request.data
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.JSONParser",  # 解析 JSON
+        "rest_framework.parsers.FormParser",  # 解析表单数据
+        "rest_framework.parsers.MultiPartParser",  # 解析文件上传
+        # 如果你的接口不上传文件，MultiPartParser 可选
+    ],
+
+    # 权限（Permission）
+    # 默认要求登录
+    # 开发环境：保留方便测试
+    # 生产环境：注意对外公开接口单独设置 AllowAny
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+
+    # 认证方式（Authentication）
+    # 开发环境：保留全部方便调试
+    # 生产环境：建议只保留 TokenAuthentication 或 JWT，去掉 Basic 和 Session
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.BasicAuthentication",  # 开发用
+        "rest_framework.authentication.SessionAuthentication",  # 浏览器登录用
+        "rest_framework.authentication.TokenAuthentication",  # 移动端或 API 用
+    ]
+}
