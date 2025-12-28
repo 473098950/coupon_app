@@ -1,5 +1,6 @@
-from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.contrib.auth.models import AbstractUser
+import datetime
 
 # 用户角色
 ROLE_CHOICES = [
@@ -12,6 +13,7 @@ ROLE_CHOICES = [
 class User(AbstractUser):
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='consumer')
     merchant = models.ForeignKey('Merchant', null=True, blank=True, on_delete=models.SET_NULL)
+    wallet = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     def is_superadmin(self):
         return self.role == 'superadmin'
@@ -41,8 +43,9 @@ class Merchant(models.Model):
 
 class MembershipCard(models.Model):
     user = models.ForeignKey('User', on_delete=models.CASCADE)
-    card_count = models.PositiveIntegerField(default=1)  # 拥有的首单核销次数
-    created_at = models.DateTimeField(auto_now_add=True)
+    card_count = models.PositiveIntegerField(default=1)  # 首单核销次数
+    purchased_at = models.DateTimeField(auto_now_add=True)  # 购买时间
+    expired_at = models.DateTimeField(default=datetime.datetime(2026, 3, 3, 23, 59, 59))  # 过期时间
 
 class CouponRule(models.Model):
     RULE_TYPE_CHOICES = [
@@ -57,7 +60,6 @@ class CouponRule(models.Model):
     discount_percent = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-
 class Redemption(models.Model):
     user = models.ForeignKey('User', on_delete=models.CASCADE)
     merchant = models.ForeignKey(Merchant, on_delete=models.CASCADE)
@@ -65,3 +67,10 @@ class Redemption(models.Model):
     coupon_rule = models.ForeignKey(CouponRule, null=True, blank=True, on_delete=models.SET_NULL)
     amount_paid = models.DecimalField(max_digits=10, decimal_places=2)
     created_at = models.DateTimeField(auto_now_add=True)
+
+class Referral(models.Model):
+    referrer = models.ForeignKey(User, related_name='referrals_made', on_delete=models.CASCADE)
+    referred_user = models.ForeignKey(User, related_name='referrals_received', on_delete=models.CASCADE)
+    reward_amount = models.DecimalField(max_digits=10, decimal_places=2, default=1.8)
+    created_at = models.DateTimeField(auto_now_add=True)
+    rewarded = models.BooleanField(default=False)
