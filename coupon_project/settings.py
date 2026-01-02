@@ -141,7 +141,7 @@ REST_FRAMEWORK = {
     # 默认分页
     # 建议保留，防止一次返回大量数据
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
-    "PAGE_SIZE": 50,  # 每页数量，可根据需求调整
+    "PAGE_SIZE": 10,  # 每页数量，可根据需求调整
 
     # 日期时间格式
     # 保持统一格式输出
