@@ -3,10 +3,24 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from decimal import Decimal
 import random
-from coupons.models import MembershipCard, Redemption, Referral, Merchant
-from coupons.serializers import MembershipCardSerializer, RedemptionSerializer, ReferralSerializer
-from coupons.permissions import IsConsumer
+# 导入模型
+from coupons.models.membership_card import MembershipCard
+from coupons.models.redemption import Redemption
+from coupons.models.referral import Referral
+from coupons.models.merchant import Merchant
 
+# 导入序列化器
+from coupons.serializers import (
+    MerchantSerializer,
+    MembershipCardSerializer,
+    RedemptionSerializer,
+    ReferralSerializer,
+    CouponRuleSerializer,
+    UserSerializer,
+    UserRegisterSerializer
+)
+
+from coupons.permissions import IsAdminOrSuperAdmin, IsMerchant, IsConsumer, IsSuperAdmin
 
 class MembershipCardViewSet(viewsets.ModelViewSet):
     queryset = MembershipCard.objects.all()
@@ -93,3 +107,27 @@ class ReferralViewSet(viewsets.ModelViewSet):
         referral.save()
         serializer = self.get_serializer(referral)
         return Response(serializer.data)
+
+class ConsumerApplyMerchantViewSet(viewsets.ViewSet):
+    """
+    消费者申请成为商家接口
+    """
+    permission_classes = [IsConsumer]
+
+    @action(detail=False, methods=['post'])
+    def apply(self, request):
+        user = request.user
+        if "merchant" in user.roles:
+            return Response({"error": "您已经是商家"}, status=400)
+
+        name = request.data.get("name")
+        phone = request.data.get("phone")
+        if not name or not phone:
+            return Response({"error": "请填写店铺名称和联系方式"}, status=400)
+
+        merchant = Merchant.objects.create(user=user, name=name, phone=phone)
+        user.roles.append("merchant")
+        user.merchant = merchant
+        user.save()
+
+        return Response({"message": "已成为商家，等待资质上传和审核"})

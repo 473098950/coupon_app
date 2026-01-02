@@ -1,13 +1,21 @@
 from rest_framework import serializers
-from .models import User, Merchant, MembershipCard, CouponRule, Redemption, Referral
 from django.contrib.auth.password_validation import validate_password
+
+# 导入模型（按你拆分后的 models 文件夹路径）
+from coupons.models.user import User
+from coupons.models.merchant import Merchant
+from coupons.models.membership_card import MembershipCard
+from coupons.models.coupon_rule import CouponRule
+from coupons.models.redemption import Redemption
+from coupons.models.referral import Referral
 
 # --------------------------- 用户序列化器 ---------------------------
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
+
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'password', 'role', 'wallet', 'merchant']
+        fields = ['id', 'username', 'email', 'password', 'roles', 'wallet', 'merchant_profile']
 
     def create(self, validated_data):
         password = validated_data.pop('password')
@@ -25,51 +33,60 @@ class UserSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
+
 class UserRegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True, required=True)
+
     class Meta:
         model = User
         fields = ('username', 'email', 'password', 'password2')
 
     def validate(self, attrs):
         if attrs['password'] != attrs['password2']:
-            raise serializers.ValidationError({"password": "Password fields didn't match."})
+            raise serializers.ValidationError({"password": "两次输入密码不一致"})
         return attrs
 
     def create(self, validated_data):
         validated_data.pop('password2')
         return User.objects.create_user(**validated_data)
 
+
 # --------------------------- 商家序列化器 ---------------------------
 class MerchantSerializer(serializers.ModelSerializer):
     class Meta:
         model = Merchant
         fields = [
-            'id', 'name', 'address', 'bank_account', 'contact_name', 'contact_id',
-            'license', 'contract', 'approved', 'created_at'
+            'id', 'user', 'name', 'phone', 'credit_code', 'license', 'contract',
+            'approved', 'created_at', 'store_address', 'contact_name', 'contact_id',
+            'store_hours', 'store_type', 'logo', 'shop_images', 'first_order_enabled',
+            'commission_rate', 'qr_code'
         ]
-        read_only_fields = ['approved', 'created_at']
+        read_only_fields = ['approved', 'created_at', 'qr_code']
+
 
 # --------------------------- 会员卡序列化器 ---------------------------
 class MembershipCardSerializer(serializers.ModelSerializer):
     class Meta:
         model = MembershipCard
-        fields = ['id', 'user', 'card_count', 'created_at']
+        fields = ['id', 'user', 'card_count', 'purchased_at', 'expired_at', 'used_first_order_rule']
 
-# --------------------------- 优惠规则 ---------------------------
+
+# --------------------------- 优惠规则序列化器 ---------------------------
 class CouponRuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = CouponRule
         fields = ['id', 'merchant', 'rule_type', 'threshold', 'discount_amount', 'discount_percent', 'created_at']
 
-# --------------------------- 核销记录 ---------------------------
+
+# --------------------------- 核销记录序列化器 ---------------------------
 class RedemptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Redemption
         fields = ['id', 'user', 'merchant', 'membership_card', 'coupon_rule', 'amount_paid', 'created_at']
 
-# --------------------------- 裂变营销 ---------------------------
+
+# --------------------------- 裂变营销/推荐奖励序列化器 ---------------------------
 class ReferralSerializer(serializers.ModelSerializer):
     class Meta:
         model = Referral
