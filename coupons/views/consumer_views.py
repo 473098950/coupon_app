@@ -3,32 +3,33 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from decimal import Decimal
 import random
-# 导入模型
-from coupons.models.membership_card import MembershipCard
-from coupons.models.redemption import Redemption
-from coupons.models.referral import Referral
-from coupons.models.merchant import Merchant
 
-# 导入序列化器
+from coupons.models import MembershipCard, Redemption, Referral, Merchant, User
 from coupons.serializers import (
     MerchantSerializer,
     MembershipCardSerializer,
     RedemptionSerializer,
     ReferralSerializer,
-    CouponRuleSerializer,
-    UserSerializer,
-    UserRegisterSerializer
+    UserSerializer
 )
+from coupons.permissions import IsConsumer
 
-from coupons.permissions import IsAdminOrSuperAdmin, IsMerchant, IsConsumer, IsSuperAdmin
 
 class MembershipCardViewSet(viewsets.ModelViewSet):
+    """
+    会员卡管理接口（消费者）
+
+    功能：
+    - 购买会员卡
+    - 续费会员卡
+    """
     queryset = MembershipCard.objects.all()
     serializer_class = MembershipCardSerializer
     permission_classes = [IsConsumer]
 
     @action(detail=False, methods=['post'])
     def buy(self, request):
+        """购买会员卡"""
         user = request.user
         card = MembershipCard.objects.create(user=user, card_count=1)
         serializer = self.get_serializer(card)
@@ -36,13 +37,22 @@ class MembershipCardViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def renew(self, request, pk=None):
+        """续费会员卡"""
         card = self.get_object()
         card.card_count += 1
         card.save()
         serializer = self.get_serializer(card)
         return Response(serializer.data)
 
+
 class RedemptionViewSet(viewsets.ModelViewSet):
+    """
+    核销接口（消费者）
+
+    功能：
+    - 核销消费
+    - 计算首单折扣、老客户折扣
+    """
     queryset = Redemption.objects.all()
     serializer_class = RedemptionSerializer
     permission_classes = [IsConsumer]
@@ -52,6 +62,7 @@ class RedemptionViewSet(viewsets.ModelViewSet):
         user = request.user
         merchant_id = request.data.get('merchant_id')
         amount = Decimal(request.data.get('amount', 0))
+
         try:
             merchant = Merchant.objects.get(id=merchant_id)
         except Merchant.DoesNotExist:
@@ -62,12 +73,14 @@ class RedemptionViewSet(viewsets.ModelViewSet):
         except MembershipCard.DoesNotExist:
             return Response({'error': '用户没有有效会员卡'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # 首单折扣
         first_use_discount = Decimal('0.0')
         if card.card_count > 0:
             first_use_discount = Decimal('1.0')
             card.card_count -= 1
             card.save()
 
+        # 老客户折扣
         old_customer_discount = Decimal(str(round(random.uniform(0.5, 1.0), 2)))
         actual_amount = max(amount - (first_use_discount + old_customer_discount), Decimal('0.0'))
 
@@ -85,7 +98,14 @@ class RedemptionViewSet(viewsets.ModelViewSet):
             'redemption': serializer.data
         })
 
+
 class ReferralViewSet(viewsets.ModelViewSet):
+    """
+    推荐奖励接口（消费者）
+
+    功能：
+    - 用户推荐奖励发放
+    """
     queryset = Referral.objects.all()
     serializer_class = ReferralSerializer
     permission_classes = [IsConsumer]
@@ -108,6 +128,7 @@ class ReferralViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(referral)
         return Response(serializer.data)
 
+
 class ConsumerApplyMerchantViewSet(viewsets.ViewSet):
     """
     消费者申请成为商家接口
@@ -116,6 +137,7 @@ class ConsumerApplyMerchantViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['post'])
     def apply(self, request):
+        """申请成为商家"""
         user = request.user
         if "merchant" in user.roles:
             return Response({"error": "您已经是商家"}, status=400)

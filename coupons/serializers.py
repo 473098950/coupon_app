@@ -53,7 +53,19 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
 
 # --------------------------- 商家序列化器 ---------------------------
+from rest_framework import serializers
+from .models.merchant import Merchant
+
 class MerchantSerializer(serializers.ModelSerializer):
+    # 模型里没有的字段用方法字段返回 None 或自定义内容
+    contract = serializers.SerializerMethodField()
+    contact_id = serializers.SerializerMethodField()
+    qr_code = serializers.SerializerMethodField()
+    shop_images = serializers.SerializerMethodField()
+    first_order_enabled = serializers.SerializerMethodField()
+    store_address = serializers.SerializerMethodField()
+    store_hours = serializers.SerializerMethodField()
+
     class Meta:
         model = Merchant
         fields = [
@@ -63,6 +75,30 @@ class MerchantSerializer(serializers.ModelSerializer):
             'commission_rate', 'qr_code'
         ]
         read_only_fields = ['approved', 'created_at', 'qr_code']
+
+    # 以下方法返回可选值或 None，保证 Swagger 正常生成
+    def get_contract(self, obj):
+        return None
+
+    def get_contact_id(self, obj):
+        return None
+
+    def get_qr_code(self, obj):
+        return None
+
+    def get_shop_images(self, obj):
+        # 返回门店照片列表
+        return obj.store_photos
+
+    def get_first_order_enabled(self, obj):
+        return obj.first_order_active
+
+    def get_store_address(self, obj):
+        return obj.address
+
+    def get_store_hours(self, obj):
+        return obj.business_hours
+
 
 
 # --------------------------- 会员卡序列化器 ---------------------------

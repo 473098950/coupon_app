@@ -1,26 +1,19 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-# 导入模型
-from coupons.models.coupon_rule import CouponRule
-from coupons.models.merchant import Merchant
-from coupons.models.membership_card import MembershipCard
-from coupons.models.redemption import Redemption
 
-# 导入序列化器
-from coupons.serializers import (
-    MerchantSerializer,
-    MembershipCardSerializer,
-    RedemptionSerializer,
-    ReferralSerializer,
-    CouponRuleSerializer,
-    UserSerializer,
-    UserRegisterSerializer
-)
-from coupons.permissions import IsAdminOrSuperAdmin, IsMerchant, IsConsumer, IsSuperAdmin
+from coupons.models import CouponRule, Merchant, MembershipCard, Redemption
+from coupons.serializers import CouponRuleSerializer, RedemptionSerializer, MembershipCardSerializer
+from coupons.permissions import IsMerchant
+
+
 class MerchantCouponViewSet(viewsets.ModelViewSet):
     """
-    商家端优惠规则管理
+    商家端优惠规则管理接口
+
+    功能：
+    - 设置首单优惠规则（满减或折扣）
+    - 核销首单优惠
     """
     queryset = CouponRule.objects.all()
     serializer_class = CouponRuleSerializer
@@ -146,7 +139,7 @@ class MerchantCouponViewSet(viewsets.ModelViewSet):
 
 class MerchantRedemptionViewSet(viewsets.ModelViewSet):
     """
-    商家端核销记录管理
+    商家端核销记录管理接口
     """
     queryset = Redemption.objects.all()
     serializer_class = RedemptionSerializer

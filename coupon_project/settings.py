@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'coupons',
+    'drf_yasg',
     'rest_framework',
     'rest_framework.authtoken' #DRF自带的Token表
 ]
@@ -138,6 +139,13 @@ REST_FRAMEWORK = {
     # 生产环境：可换成 OpenAPI 或删掉
     "DEFAULT_SCHEMA_CLASS": "rest_framework.schemas.coreapi.AutoSchema",
 
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.TokenAuthentication',
+    ],
     # 默认分页
     # 建议保留，防止一次返回大量数据
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
