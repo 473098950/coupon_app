@@ -19,9 +19,10 @@ class MerchantCouponViewSet(viewsets.ModelViewSet):
     serializer_class = CouponRuleSerializer
     permission_classes = [IsMerchant]
 
+    http_method_names = ['get', 'post']
     def get_queryset(self):
         # 只返回当前商家创建的优惠规则
-        merchant = self.request.user.merchant
+        merchant = self.request.user.merchant_profile
         return CouponRule.objects.filter(merchant=merchant)
 
     @action(detail=False, methods=['post'])
@@ -34,14 +35,19 @@ class MerchantCouponViewSet(viewsets.ModelViewSet):
             discount_amount: 减多少（仅满减）
             discount_rate: 折扣率（仅折扣）
         """
-        merchant = request.user.merchant
+        merchant = request.user.merchant_profile
+        if not merchant:
+            return Response({'error': '用户不是商家'}, status=status.HTTP_400_BAD_REQUEST)
+
         rule_type = request.data.get('rule_type')
 
         # 检查互斥规则
-        if CouponRule.objects.filter(
+        existing_rule = CouponRule.objects.filter(
             merchant=merchant,
             rule_type__in=['discount_amount','discount_rate']
-        ).exists():
+        ).first()
+
+        if existing_rule:
             return Response({'error': '首单优惠规则已存在，只能修改'}, status=status.HTTP_400_BAD_REQUEST)
 
         if rule_type not in ['discount_amount', 'discount_rate']:
@@ -82,7 +88,7 @@ class MerchantCouponViewSet(viewsets.ModelViewSet):
                 rule_type='discount_rate',
                 discount_rate=discount_rate
             )
-            actual_price = None  # 前端需要提供 original_price 才能计算
+            actual_price = None  # 前端提供 original_price 才能计算
 
         serializer = self.get_serializer(rule)
         return Response({
@@ -98,7 +104,10 @@ class MerchantCouponViewSet(viewsets.ModelViewSet):
             membership_card_id
             original_price（仅折扣规则）
         """
-        merchant = request.user.merchant
+        merchant = request.user.merchant_profile
+        if not merchant:
+            return Response({'error': '用户不是商家'}, status=status.HTTP_400_BAD_REQUEST)
+
         rule = CouponRule.objects.filter(
             merchant=merchant,
             rule_type__in=['discount_amount','discount_rate']
@@ -107,10 +116,13 @@ class MerchantCouponViewSet(viewsets.ModelViewSet):
             return Response({'error': '未设置首单优惠规则'}, status=status.HTTP_400_BAD_REQUEST)
 
         card_id = request.data.get('membership_card_id')
+        if not card_id:
+            return Response({'error': '请提供 membership_card_id'}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
-            card = MembershipCard.objects.get(id=card_id, user=request.user)
+            card = MembershipCard.objects.get(id=card_id)
         except MembershipCard.DoesNotExist:
-            return Response({'error': '会员卡不存在或不属于用户'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': '会员卡不存在'}, status=status.HTTP_400_BAD_REQUEST)
 
         if getattr(card, 'used_first_order_rule', False):
             return Response({'error': '此会员卡首单优惠已使用'}, status=status.HTTP_400_BAD_REQUEST)
@@ -145,6 +157,10 @@ class MerchantRedemptionViewSet(viewsets.ModelViewSet):
     serializer_class = RedemptionSerializer
     permission_classes = [IsMerchant]
 
+    http_method_names = ['get']
     def get_queryset(self):
         # 只返回当前商家相关的核销记录
-        return Redemption.objects.filter(merchant=self.request.user.merchant)
+        merchant = self.request.user.merchant_profile
+        if not merchant:
+            return Redemption.objects.none()
+        return Redemption.objects.filter(merchant=merchant)

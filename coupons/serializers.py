@@ -1,7 +1,9 @@
+# coupons/serializers.py
+
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 
-# 导入模型（按你拆分后的 models 文件夹路径）
+# 导入模型
 from coupons.models.user import User
 from coupons.models.merchant import Merchant
 from coupons.models.membership_card import MembershipCard
@@ -9,7 +11,9 @@ from coupons.models.coupon_rule import CouponRule
 from coupons.models.redemption import Redemption
 from coupons.models.referral import Referral
 
-# --------------------------- 用户序列化器 ---------------------------
+# ---------------------------
+# 用户序列化器
+# ---------------------------
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
 
@@ -52,10 +56,9 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         return User.objects.create_user(**validated_data)
 
 
-# --------------------------- 商家序列化器 ---------------------------
-from rest_framework import serializers
-from .models.merchant import Merchant
-
+# ---------------------------
+# 商家序列化器
+# ---------------------------
 class MerchantSerializer(serializers.ModelSerializer):
     # 模型里没有的字段用方法字段返回 None 或自定义内容
     contract = serializers.SerializerMethodField()
@@ -76,7 +79,6 @@ class MerchantSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['approved', 'created_at', 'qr_code']
 
-    # 以下方法返回可选值或 None，保证 Swagger 正常生成
     def get_contract(self, obj):
         return None
 
@@ -87,7 +89,6 @@ class MerchantSerializer(serializers.ModelSerializer):
         return None
 
     def get_shop_images(self, obj):
-        # 返回门店照片列表
         return obj.store_photos
 
     def get_first_order_enabled(self, obj):
@@ -100,29 +101,36 @@ class MerchantSerializer(serializers.ModelSerializer):
         return obj.business_hours
 
 
-
-# --------------------------- 会员卡序列化器 ---------------------------
+# ---------------------------
+# 会员卡序列化器
+# ---------------------------
 class MembershipCardSerializer(serializers.ModelSerializer):
     class Meta:
         model = MembershipCard
         fields = ['id', 'user', 'card_count', 'purchased_at', 'expired_at', 'used_first_order_rule']
 
 
-# --------------------------- 优惠规则序列化器 ---------------------------
+# ---------------------------
+# 优惠规则序列化器
+# ---------------------------
 class CouponRuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = CouponRule
-        fields = ['id', 'merchant', 'rule_type', 'threshold', 'discount_amount', 'discount_percent', 'created_at']
+        fields = ['id', 'merchant', 'rule_type', 'threshold', 'discount_amount', 'discount_rate', 'created_at']
 
 
-# --------------------------- 核销记录序列化器 ---------------------------
+# ---------------------------
+# 核销记录序列化器
+# ---------------------------
 class RedemptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Redemption
         fields = ['id', 'user', 'merchant', 'membership_card', 'coupon_rule', 'amount_paid', 'created_at']
 
 
-# --------------------------- 裂变营销/推荐奖励序列化器 ---------------------------
+# ---------------------------
+# 裂变营销 / 推荐奖励序列化器
+# ---------------------------
 class ReferralSerializer(serializers.ModelSerializer):
     class Meta:
         model = Referral

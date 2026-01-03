@@ -1,12 +1,13 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
+from django.contrib.auth import authenticate
 from decimal import Decimal
 import random
 
 from coupons.models import MembershipCard, Redemption, Referral, Merchant, User
 from coupons.serializers import (
-    MerchantSerializer,
     MembershipCardSerializer,
     RedemptionSerializer,
     ReferralSerializer,
@@ -15,21 +16,62 @@ from coupons.serializers import (
 from coupons.permissions import IsConsumer
 
 
+# -------------------- 用户注册和登录 --------------------
+class UserRegisterView(APIView):
+    """
+    用户注册接口（消费者）
+    """
+    permission_classes = []
+
+    def post(self, request):
+        username = request.data.get('username')
+        password = request.data.get('password')
+        email = request.data.get('email', '')
+
+        if not username or not password:
+            return Response({'error': '用户名和密码必填'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if User.objects.filter(username=username).exists():
+            return Response({'error': '用户名已存在'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.create_user(username=username, password=password, email=email)
+        serializer = UserSerializer(user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class UserLoginView(APIView):
+    """
+    用户登录接口（消费者）
+    """
+    permission_classes = []
+
+    def post(self, request):
+        username = request.data.get('username')
+        password = request.data.get('password')
+
+        if not username or not password:
+            return Response({'error': '用户名和密码必填'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = authenticate(username=username, password=password)
+        if not user:
+            return Response({'error': '用户名或密码错误'}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = UserSerializer(user)
+        return Response(serializer.data)
+
+
+# -------------------- 会员卡管理 --------------------
 class MembershipCardViewSet(viewsets.ModelViewSet):
     """
     会员卡管理接口（消费者）
-
-    功能：
-    - 购买会员卡
-    - 续费会员卡
     """
     queryset = MembershipCard.objects.all()
     serializer_class = MembershipCardSerializer
     permission_classes = [IsConsumer]
+    http_method_names = ['get', 'post']
 
     @action(detail=False, methods=['post'])
     def buy(self, request):
-        """购买会员卡"""
         user = request.user
         card = MembershipCard.objects.create(user=user, card_count=1)
         serializer = self.get_serializer(card)
@@ -37,7 +79,6 @@ class MembershipCardViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def renew(self, request, pk=None):
-        """续费会员卡"""
         card = self.get_object()
         card.card_count += 1
         card.save()
@@ -45,17 +86,15 @@ class MembershipCardViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+# -------------------- 核销接口 --------------------
 class RedemptionViewSet(viewsets.ModelViewSet):
     """
     核销接口（消费者）
-
-    功能：
-    - 核销消费
-    - 计算首单折扣、老客户折扣
     """
     queryset = Redemption.objects.all()
     serializer_class = RedemptionSerializer
     permission_classes = [IsConsumer]
+    http_method_names = ['get', 'post']
 
     @action(detail=False, methods=['post'])
     def redeem(self, request):
@@ -99,21 +138,21 @@ class RedemptionViewSet(viewsets.ModelViewSet):
         })
 
 
+# -------------------- 推荐奖励接口 --------------------
 class ReferralViewSet(viewsets.ModelViewSet):
     """
     推荐奖励接口（消费者）
-
-    功能：
-    - 用户推荐奖励发放
     """
     queryset = Referral.objects.all()
     serializer_class = ReferralSerializer
     permission_classes = [IsConsumer]
+    http_method_names = ['get', 'post']
 
     @action(detail=False, methods=['post'])
     def reward(self, request):
         referrer_id = request.data.get('referrer_id')
         referred_user_id = request.data.get('referred_user_id')
+
         try:
             referrer = request.user if request.user.id == int(referrer_id) else None
             referred_user = User.objects.get(id=referred_user_id)
@@ -129,15 +168,16 @@ class ReferralViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+# -------------------- 消费者申请成为商家 --------------------
 class ConsumerApplyMerchantViewSet(viewsets.ViewSet):
     """
     消费者申请成为商家接口
     """
     permission_classes = [IsConsumer]
+    http_method_names = ['post']
 
     @action(detail=False, methods=['post'])
     def apply(self, request):
-        """申请成为商家"""
         user = request.user
         if "merchant" in user.roles:
             return Response({"error": "您已经是商家"}, status=400)
@@ -149,7 +189,7 @@ class ConsumerApplyMerchantViewSet(viewsets.ViewSet):
 
         merchant = Merchant.objects.create(user=user, name=name, phone=phone)
         user.roles.append("merchant")
-        user.merchant = merchant
+        user.merchant_profile = merchant
         user.save()
 
         return Response({"message": "已成为商家，等待资质上传和审核"})
