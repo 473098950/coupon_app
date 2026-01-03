@@ -2,8 +2,8 @@
 
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
+from decimal import Decimal
 
-# 导入模型
 from coupons.models.user import User
 from coupons.models.merchant import Merchant
 from coupons.models.membership_card import MembershipCard
@@ -11,15 +11,27 @@ from coupons.models.coupon_rule import CouponRule
 from coupons.models.redemption import Redemption
 from coupons.models.referral import Referral
 
+
 # ---------------------------
 # 用户序列化器
 # ---------------------------
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
+    merchant_profile = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'password', 'roles', 'wallet', 'merchant_profile']
+        read_only_fields = ['wallet', 'merchant_profile']
+
+    def get_merchant_profile(self, obj):
+        if hasattr(obj, 'merchant_profile') and obj.merchant_profile:
+            return {
+                'id': obj.merchant_profile.id,
+                'name': obj.merchant_profile.name,
+                'phone': getattr(obj.merchant_profile, 'phone', '')
+            }
+        return None
 
     def create(self, validated_data):
         password = validated_data.pop('password')
@@ -53,14 +65,17 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop('password2')
-        return User.objects.create_user(**validated_data)
+        return User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data.get('email', ''),
+            password=validated_data['password']
+        )
 
 
 # ---------------------------
 # 商家序列化器
 # ---------------------------
 class MerchantSerializer(serializers.ModelSerializer):
-    # 模型里没有的字段用方法字段返回 None 或自定义内容
     contract = serializers.SerializerMethodField()
     contact_id = serializers.SerializerMethodField()
     qr_code = serializers.SerializerMethodField()
@@ -89,16 +104,16 @@ class MerchantSerializer(serializers.ModelSerializer):
         return None
 
     def get_shop_images(self, obj):
-        return obj.store_photos
+        return getattr(obj, 'store_photos', [])
 
     def get_first_order_enabled(self, obj):
-        return obj.first_order_active
+        return getattr(obj, 'first_order_active', False)
 
     def get_store_address(self, obj):
-        return obj.address
+        return getattr(obj, 'address', '')
 
     def get_store_hours(self, obj):
-        return obj.business_hours
+        return getattr(obj, 'business_hours', '')
 
 
 # ---------------------------
@@ -123,9 +138,30 @@ class CouponRuleSerializer(serializers.ModelSerializer):
 # 核销记录序列化器
 # ---------------------------
 class RedemptionSerializer(serializers.ModelSerializer):
+    membership_card = serializers.SerializerMethodField()
+    coupon_rule = serializers.SerializerMethodField()
+
     class Meta:
         model = Redemption
         fields = ['id', 'user', 'merchant', 'membership_card', 'coupon_rule', 'amount_paid', 'created_at']
+
+    def get_membership_card(self, obj):
+        if obj.membership_card:
+            return {
+                'id': obj.membership_card.id,
+                'card_count': obj.membership_card.card_count
+            }
+        return None
+
+    def get_coupon_rule(self, obj):
+        if obj.coupon_rule:
+            return {
+                'id': obj.coupon_rule.id,
+                'rule_type': obj.coupon_rule.rule_type,
+                'discount_amount': float(getattr(obj.coupon_rule, 'discount_amount', 0)),
+                'discount_rate': float(getattr(obj.coupon_rule, 'discount_rate', 0))
+            }
+        return None
 
 
 # ---------------------------

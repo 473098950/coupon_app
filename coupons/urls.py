@@ -1,58 +1,36 @@
 from rest_framework.routers import DefaultRouter
 from django.urls import path, include
-
-# 导入各端的 ViewSet
-from .views.admin_views import AdminMerchantViewSet
-from .views.merchant_views import MerchantCouponViewSet, MerchantRedemptionViewSet
-from .views.consumer_views import MembershipCardViewSet, RedemptionViewSet, ReferralViewSet
+from coupons.views.consumer_views import (
+    MembershipCardViewSet,
+    RedemptionViewSet,
+    ReferralViewSet,
+    ConsumerApplyMerchantViewSet,
+    UserRegisterView,
+    UserLoginView
+)
+from coupons.views.merchant_views import MerchantCouponViewSet, MerchantRedemptionViewSet
+from coupons.views.admin_views import AdminMerchantViewSet
 
 router = DefaultRouter()
 
-# ---------------------------
-# 管理员端 (超级管理员 / 管理员)
-# ---------------------------
-router.register(
-    'admin/merchants',
-    AdminMerchantViewSet,
-    basename='admin-merchant'
-)
+# ---------------- 消费者接口 ----------------
+router.register(r'consumer/membership-cards', MembershipCardViewSet, basename='membership-card')
+router.register(r'consumer/redemptions', RedemptionViewSet, basename='redemption')
+router.register(r'consumer/referrals', ReferralViewSet, basename='referral')
+router.register(r'consumer/apply-merchant', ConsumerApplyMerchantViewSet, basename='apply-merchant')
 
-# ---------------------------
-# 商家端
-# ---------------------------
-router.register(
-    'merchant/coupons',
-    MerchantCouponViewSet,
-    basename='merchant-coupon'
-)
-router.register(
-    'merchant/redemptions',
-    MerchantRedemptionViewSet,
-    basename='merchant-redemption'
-)
+# ---------------- 商家接口 ----------------
+router.register(r'merchant/coupons', MerchantCouponViewSet, basename='merchant-coupon')
+router.register(r'merchant/redemptions', MerchantRedemptionViewSet, basename='merchant-redemption')
 
-# ---------------------------
-# 消费者端
-# ---------------------------
-router.register(
-    'consumer/membership_cards',
-    MembershipCardViewSet,
-    basename='consumer-membership-card'
-)
-router.register(
-    'consumer/redemptions',
-    RedemptionViewSet,
-    basename='consumer-redemption'
-)
-router.register(
-    'consumer/referrals',
-    ReferralViewSet,
-    basename='consumer-referral'
-)
+# ---------------- 管理员接口 ----------------
+router.register(r'admin/merchants', AdminMerchantViewSet, basename='admin-merchant')
 
-# ---------------------------
-# 最终路由
-# ---------------------------
+# ---------------- 用户注册 / 登录 ----------------
 urlpatterns = [
+    path('user/register/', UserRegisterView.as_view(), name='user-register'),
+    path('user/login/', UserLoginView.as_view(), name='user-login'),
+
+    # 包含所有 ViewSet 自动生成的路由
     path('', include(router.urls)),
 ]
