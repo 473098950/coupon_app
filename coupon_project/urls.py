@@ -22,7 +22,7 @@ def home(request):
 schema_view = get_schema_view(
     openapi.Info(
         title="Coupon Backend API",
-        default_version='v1',
+        default_version='V0.2',
         description="优惠券后台系统 API 文档（消费者 / 商家 / 管理员）",
         contact=openapi.Contact(email="support@example.com"),
         license=openapi.License(name="MIT License"),
