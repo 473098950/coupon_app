@@ -1,5 +1,3 @@
-# coupons/serializers.py
-
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from decimal import Decimal
@@ -10,7 +8,6 @@ from coupons.models.membership_card import MembershipCard
 from coupons.models.coupon_rule import CouponRule
 from coupons.models.redemption import Redemption
 from coupons.models.referral import Referral
-
 
 # ---------------------------
 # 用户序列化器
@@ -171,3 +168,47 @@ class ReferralSerializer(serializers.ModelSerializer):
     class Meta:
         model = Referral
         fields = ['id', 'referrer', 'referred_user', 'reward_amount', 'created_at', 'rewarded']
+
+
+# ---------------------------
+# JWT 自定义序列化器
+# ---------------------------
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """
+    支持两种登录方式：
+    1. username + password（网页端 / API 通用）
+    2. wechat_openid（小程序登录）
+    登录返回 token 的同时，返回 roles 和默认角色
+    """
+    openid = serializers.CharField(write_only=True, required=False)
+
+    def validate(self, attrs):
+        openid = attrs.pop('openid', None)
+        if openid:
+            # 微信登录
+            try:
+                user = User.objects.get(wechat_openid=openid)
+            except User.DoesNotExist:
+                raise serializers.ValidationError("微信用户不存在，请先注册")
+            self.user = user
+        else:
+            # 用户名 + 密码登录
+            return super().validate(attrs)
+
+        # 生成 token
+        refresh = self.get_token(self.user)
+        access = refresh.access_token
+
+        # 默认角色选择逻辑
+        roles = self.user.roles
+        default_role = 'consumer' if 'consumer' in roles else roles[0]
+
+        return {
+            'refresh': str(refresh),
+            'access': str(access),
+            'username': self.user.username,
+            'roles': roles,
+            'default_role': default_role,
+        }

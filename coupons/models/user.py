@@ -27,18 +27,22 @@ class User(AbstractUser):
     wallet = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     REQUIRED_FIELDS = []  # AbstractUser 默认要求 email，可留空
-    USERNAME_FIELD = 'username'  # 登录用 username，可以用 wechat_openid 填充
+    USERNAME_FIELD = 'username'  # 登录用 username
 
-    # ---------------- 角色判断方法 ----------------
+    # ---------------- 角色判断属性 ----------------
+    @property
     def is_superadmin(self):
         return 'superadmin' in self.roles
 
+    @property
     def is_admin(self):
         return 'admin' in self.roles
 
+    @property
     def is_consumer(self):
         return 'consumer' in self.roles
 
+    @property
     def is_merchant(self):
         return 'merchant' in self.roles
 
@@ -74,3 +78,7 @@ class User(AbstractUser):
             raise ValueError("余额不足")
         self.wallet -= amount
         self.save()
+
+    # ---------------- 调试显示 ----------------
+    def __str__(self):
+        return f"{self.username} ({', '.join(self.roles)})"

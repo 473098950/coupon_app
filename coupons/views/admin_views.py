@@ -1,142 +1,200 @@
 # coupons/views/admin_views.py
-from rest_framework import viewsets, filters, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Count
-from django.utils.timezone import now
-from django.http import HttpResponse
-from django.db.models.functions import TruncMonth
-import csv
-from django.contrib.auth import authenticate
-from rest_framework.authtoken.models import Token
-
-from coupons.models import Merchant, MembershipCard, Redemption, User
-from coupons.serializers import MerchantSerializer, MembershipCardSerializer, RedemptionSerializer, UserSerializer
-from coupons.permissions import IsAdminOrSuperAdmin
-
-
-# ---------------------------
-# 管理员登录接口
-# ---------------------------
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status, viewsets
 
-class AdminLoginView(APIView):
-    """
-    管理员 / 超级管理员 登录接口
-    """
-    def post(self, request):
-        username = request.data.get('username')
-        password = request.data.get('password')
-        if not username or not password:
-            return Response({'error': '用户名和密码不能为空'}, status=status.HTTP_400_BAD_REQUEST)
-        user = authenticate(username=username, password=password)
-        if user is None:
-            return Response({'error': '用户名或密码错误'}, status=status.HTTP_401_UNAUTHORIZED)
-        if not (user.is_admin() or user.is_superadmin()):
-            return Response({'error': '用户没有管理员权限'}, status=status.HTTP_403_FORBIDDEN)
-        token, created = Token.objects.get_or_create(user=user)
-        return Response({
-            'token': token.key,
-            'user': UserSerializer(user).data
-        })
+from coupons.permissions import IsAdminOrSuperAdmin
+from coupons.models import User, Merchant
+
 
 # ---------------------------
-# 管理员商家管理
+# 管理员分配用户角色
 # ---------------------------
-class AdminMerchantViewSet(viewsets.ModelViewSet):
-    queryset = Merchant.objects.select_related('user').all()
-    serializer_class = MerchantSerializer
+class AdminAssignRoleView(APIView):
+    """
+    管理员接口：给用户分配角色
+    """
     permission_classes = [IsAdminOrSuperAdmin]
 
-    http_method_names = ['get', 'post']
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['approved']
-    search_fields = ['name', 'phone', 'credit_code']
-    ordering_fields = ['created_at', 'name']
-    ordering = ['-created_at']
-
-    @action(detail=True, methods=['post'])
-    def approve(self, request, pk=None):
-        merchant = self.get_object()
-        merchant.approved = True
-        merchant.save(update_fields=['approved'])
-        return Response({'detail': '商家已审核通过'})
-
-    @action(detail=True, methods=['post'])
-    def ban(self, request, pk=None):
-        merchant = self.get_object()
-        merchant.approved = False
-        merchant.save(update_fields=['approved'])
-        return Response({'detail': '商家已封禁'})
-
-    @action(detail=False, methods=['get'])
-    def merchant_count(self, request):
-        return Response({'count': Merchant.objects.count()})
-
-    @action(detail=False, methods=['get'])
-    def card_count(self, request):
-        return Response({'count': MembershipCard.objects.count()})
-
-    @action(detail=False, methods=['get'])
-    def active_card_count(self, request):
-        count = Redemption.objects.values('membership_card').distinct().count()
-        return Response({'count': count})
-
-    @action(detail=False, methods=['get'])
-    def month_active_cards(self, request):
-        today = now()
-        count = Redemption.objects.filter(
-            created_at__year=today.year,
-            created_at__month=today.month
-        ).values('membership_card').distinct().count()
-        return Response({'count': count})
-
-    @action(detail=False, methods=['get'])
-    def monthly_stats(self, request):
-        qs = Redemption.objects.annotate(month=TruncMonth('created_at')) \
-                               .values('month') \
-                               .annotate(total=Count('id')) \
-                               .order_by('month')
-        return Response(qs)
-
-    @action(detail=False, methods=['get'])
-    def export_cards(self, request):
-        response = HttpResponse(content_type='text/csv')
-        response['Content-Disposition'] = 'attachment; filename="membership_cards.csv"'
-        writer = csv.writer(response)
-        writer.writerow(['卡片ID', '用户ID', '购买时间', '首单是否已使用'])
-        for card in MembershipCard.objects.select_related('user'):
-            writer.writerow([
-                card.id,
-                card.user_id,
-                card.purchased_at,
-                '是' if card.used_first_order_rule else '否'
-            ])
-        return response
-
-    @action(detail=True, methods=['get'])
-    def export_merchant_report(self, request, pk=None):
-        merchant = self.get_object()
-        qs = Redemption.objects.filter(merchant=merchant).select_related('membership_card')
-        records = []
-        total_amount = 0
-        for r in qs:
-            total_amount += float(r.amount_paid)
-            records.append({
-                'membership_card_id': r.membership_card_id,
-                'date': r.created_at,
-                'amount_paid': r.amount_paid,
-                'is_first_order': r.membership_card.used_first_order_rule,
-            })
-        commission_rate = 0.10
-        commission = round(total_amount * commission_rate, 2)
-        return Response({
-            'merchant': merchant.name,
-            'records': records,
-            'summary': {
-                'total_amount': total_amount,
-                'commission_rate': commission_rate,
-                'commission': commission,
+    @swagger_auto_schema(
+        operation_summary="分配用户角色",
+        operation_description="管理员接口：给指定用户名的用户分配角色（consumer / merchant / admin / superadmin）",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['username', 'role'],
+            properties={
+                'username': openapi.Schema(type=openapi.TYPE_STRING, description='需要修改角色的用户名'),
+                'role': openapi.Schema(type=openapi.TYPE_STRING, description='角色名称，可选值: consumer, merchant, admin, superadmin')
             }
-        })
+        ),
+        responses={
+            200: openapi.Response(
+                description="分配成功",
+                examples={"application/json": {"message": "已给用户 testuser 分配角色 consumer", "roles": ["consumer"]}}
+            ),
+            400: openapi.Response(
+                description="请求参数错误",
+                examples={"application/json": {"error": "username 和 role 必填"}}
+            ),
+            404: openapi.Response(
+                description="用户不存在",
+                examples={"application/json": {"error": "用户不存在"}}
+            ),
+            403: openapi.Response(
+                description="权限不足",
+                examples={"application/json": {"detail": "您没有执行该操作的权限。"}}
+            )
+        }
+    )
+    def post(self, request):
+        username = request.data.get('username')
+        role = request.data.get('role')
+
+        if not username or not role:
+            return Response({"error": "username 和 role 必填"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response({"error": "用户不存在"}, status=status.HTTP_404_NOT_FOUND)
+
+        if role not in ['consumer', 'merchant', 'admin', 'superadmin']:
+            return Response({"error": "角色不合法"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if role in getattr(user, 'roles', []):
+            return Response({"message": f"用户已经有角色 {role}", "roles": user.roles})
+
+        user.add_role(role)
+        return Response({"message": f"已给用户 {username} 分配角色 {role}", "roles": user.roles})
+
+
+# ---------------------------
+# 管理员移除用户角色
+# ---------------------------
+class AdminRemoveRoleView(APIView):
+    """
+    管理员接口：移除用户角色
+    """
+    permission_classes = [IsAdminOrSuperAdmin]
+
+    @swagger_auto_schema(
+        operation_summary="移除用户角色",
+        operation_description="管理员接口：从指定用户名的用户移除角色（consumer / merchant / admin / superadmin）",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['username', 'role'],
+            properties={
+                'username': openapi.Schema(type=openapi.TYPE_STRING, description='需要修改角色的用户名'),
+                'role': openapi.Schema(type=openapi.TYPE_STRING, description='角色名称，可选值: consumer, merchant, admin, superadmin')
+            }
+        ),
+        responses={
+            200: openapi.Response(
+                description="移除成功",
+                examples={"application/json": {"message": "已从用户 testuser 移除角色 consumer", "roles": []}}
+            ),
+            400: openapi.Response(
+                description="请求参数错误",
+                examples={"application/json": {"error": "username 和 role 必填"}}
+            ),
+            404: openapi.Response(
+                description="用户不存在",
+                examples={"application/json": {"error": "用户不存在"}}
+            ),
+            403: openapi.Response(
+                description="权限不足",
+                examples={"application/json": {"detail": "您没有执行该操作的权限。"}}
+            )
+        }
+    )
+    def post(self, request):
+        username = request.data.get('username')
+        role = request.data.get('role')
+
+        if not username or not role:
+            return Response({"error": "username 和 role 必填"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response({"error": "用户不存在"}, status=status.HTTP_404_NOT_FOUND)
+
+        if role not in ['consumer', 'merchant', 'admin', 'superadmin']:
+            return Response({"error": "角色不合法"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if role not in getattr(user, 'roles', []):
+            return Response({"message": f"用户没有角色 {role}", "roles": user.roles})
+
+        user.remove_role(role)
+        return Response({"message": f"已从用户 {username} 移除角色 {role}", "roles": user.roles})
+
+
+# ---------------------------
+# 管理员管理商家接口
+# ---------------------------
+class AdminMerchantViewSet(viewsets.ModelViewSet):
+    """
+    管理员接口：管理商家（列表 / 创建 / 更新 / 删除）
+    """
+    queryset = Merchant.objects.all()
+    permission_classes = [IsAdminOrSuperAdmin]
+
+    @swagger_auto_schema(operation_summary="列出所有商家")
+    def list(self, request, *args, **kwargs):
+        merchants = [{"id": m.id, "name": m.name} for m in self.queryset]
+        return Response({"merchants": merchants})
+
+    @swagger_auto_schema(operation_summary="查看单个商家详情")
+    def retrieve(self, request, pk=None):
+        try:
+            merchant = Merchant.objects.get(pk=pk)
+            data = {"id": merchant.id, "name": merchant.name}
+            return Response(data)
+        except Merchant.DoesNotExist:
+            return Response({"error": "商家不存在"}, status=status.HTTP_404_NOT_FOUND)
+
+    @swagger_auto_schema(
+        operation_summary="创建商家",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['name'],
+            properties={'name': openapi.Schema(type=openapi.TYPE_STRING, description='商家名称')}
+        )
+    )
+    def create(self, request, *args, **kwargs):
+        name = request.data.get('name')
+        if not name:
+            return Response({"error": "name 必填"}, status=status.HTTP_400_BAD_REQUEST)
+        merchant = Merchant.objects.create(name=name)
+        return Response({"id": merchant.id, "name": merchant.name}, status=status.HTTP_201_CREATED)
+
+    @swagger_auto_schema(
+        operation_summary="更新商家",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['name'],
+            properties={'name': openapi.Schema(type=openapi.TYPE_STRING, description='商家名称')}
+        )
+    )
+    def update(self, request, pk=None):
+        try:
+            merchant = Merchant.objects.get(pk=pk)
+            name = request.data.get('name')
+            if not name:
+                return Response({"error": "name 必填"}, status=status.HTTP_400_BAD_REQUEST)
+            merchant.name = name
+            merchant.save()
+            return Response({"id": merchant.id, "name": merchant.name})
+        except Merchant.DoesNotExist:
+            return Response({"error": "商家不存在"}, status=status.HTTP_404_NOT_FOUND)
+
+    @swagger_auto_schema(operation_summary="删除商家")
+    def destroy(self, request, pk=None):
+        try:
+            merchant = Merchant.objects.get(pk=pk)
+            merchant.delete()
+            return Response({"message": "商家已删除"})
+        except Merchant.DoesNotExist:
+            return Response({"error": "商家不存在"}, status=status.HTTP_404_NOT_FOUND)
